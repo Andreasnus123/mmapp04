@@ -1,0 +1,129 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: andreasnus123/llm-backend
+
+jobs:
+  build-and-test:
+    name: Build & Test Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        working-directory: ./llm
+        run: mvn clean package
+      
+      - name: Run tests
+        working-directory: ./llm
+        run: mvn test
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: llm/target/surefire-reports/
+          retention-days: 30
+
+  docker-build-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+      
+      - name: Build with Maven
+        working-directory: ./llm
+        run: mvn clean package -DskipTests
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./llm
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  summary:
+    name: Backend Summary
+    runs-on: ubuntu-latest
+    needs: [build-and-test, docker-build-push]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "=========================================="
+          echo "Backend CI/CD Results"
+          echo "=========================================="
+          echo "Build & Test: ${{ needs.build-and-test.result }}"
+          echo "Docker Build: ${{ needs.docker-build-push.result }}"
+          echo "=========================================="
+          
+          if [ "${{ needs.build-and-test.result }}" != "success" ]; then
+            echo "❌ Backend build/test failed"
+            exit 1
+          fi
+          
+          if [ "${{ github.ref }}" == "refs/heads/main" ] && [ "${{ needs.docker-build-push.result }}" != "success" ]; then
+            echo "❌ Docker build/push failed"
+            exit 1
+          fi
+          
+          echo "✅ Backend workflow completed successfully!"

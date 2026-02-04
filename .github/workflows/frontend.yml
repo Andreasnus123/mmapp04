@@ -1,0 +1,309 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: andreasnus123
+  BACKEND_URL: http://localhost:8080
+
+jobs:
+  pylint:
+    name: Pylint Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install pylint
+        run: pip install pylint
+      
+      - name: Pylint - llm-frontend-python
+        working-directory: ./llm-frontend-python
+        run: |
+          echo "Running pylint on llm-frontend-python..."
+          pylint --rcfile=../.pylintrc *.py || exit 1
+      
+      - name: Pylint - llm-multiroute
+        working-directory: ./llm-multiroute
+        run: |
+          echo "Running pylint on llm-multiroute..."
+          pylint --rcfile=../.pylintrc app/ tests/ || exit 1
+      
+      - name: Pylint - llm-python
+        working-directory: ./llm-python
+        run: |
+          echo "Running pylint on llm-python..."
+          pylint --rcfile=../.pylintrc app/ tests/ || exit 1
+      
+      - name: Pylint - deepeval-tests
+        working-directory: ./deepeval-tests
+        run: |
+          echo "Running pylint on deepeval-tests..."
+          pylint --rcfile=../.pylintrc *.py || exit 1
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linting tools
+        run: pip install flake8 black isort
+      
+      - name: Check llm-frontend-python
+        working-directory: ./llm-frontend-python
+        run: |
+          echo "Checking code formatting..."
+          black --check . || echo "⚠️ Run 'black .' to fix"
+          
+          echo "Checking import sorting..."
+          isort --check-only . || echo "⚠️ Run 'isort .' to fix"
+          
+          echo "Running flake8..."
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503 || true
+      
+      - name: Check llm-multiroute
+        working-directory: ./llm-multiroute
+        run: |
+          echo "Checking code formatting..."
+          black --check . || echo "⚠️ Run 'black .' to fix"
+          
+          echo "Checking import sorting..."
+          isort --check-only . || echo "⚠️ Run 'isort .' to fix"
+          
+          echo "Running flake8..."
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503 || true
+      
+      - name: Check llm-python
+        working-directory: ./llm-python
+        run: |
+          echo "Checking code formatting..."
+          black --check . || echo "⚠️ Run 'black .' to fix"
+          
+          echo "Checking import sorting..."
+          isort --check-only . || echo "⚠️ Run 'isort .' to fix"
+          
+          echo "Running flake8..."
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503 || true
+
+  promptfoo-tests:
+    name: Promptfoo Evaluations
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+      
+      - name: Build backend
+        working-directory: ./llm
+        run: mvn clean package -DskipTests
+      
+      - name: Start backend service
+        working-directory: ./llm
+        run: |
+          java -jar target/*.jar &
+          echo $! > backend.pid
+          timeout 60 bash -c 'until curl -f http://localhost:8080/actuator/health 2>/dev/null; do sleep 2; done'
+        env:
+          SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Run Promptfoo tests
+        working-directory: ./promptfoo-tests
+        run: npm run eval
+        env:
+          BACKEND_URL: http://localhost:8080
+      
+      - name: Upload Promptfoo results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results
+          path: promptfoo-tests/.promptfoo/
+          retention-days: 30
+      
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f llm/backend.pid ]; then
+            kill $(cat llm/backend.pid) || true
+          fi
+
+  deepeval-tests:
+    name: Deepeval Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+      
+      - name: Build backend
+        working-directory: ./llm
+        run: mvn clean package -DskipTests
+      
+      - name: Start backend service
+        working-directory: ./llm
+        run: |
+          java -jar target/*.jar &
+          echo $! > backend.pid
+          timeout 60 bash -c 'until curl -f http://localhost:8080/actuator/health 2>/dev/null; do sleep 2; done'
+        env:
+          SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        working-directory: ./deepeval-tests
+        run: pip install -r requirements.txt
+      
+      - name: Run Deepeval tests
+        working-directory: ./deepeval-tests
+        run: pytest -v --tb=short
+        env:
+          BACKEND_URL: http://localhost:8080
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      
+      - name: Upload Deepeval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deepeval-results
+          path: deepeval-tests/.deepeval/
+          retention-days: 30
+      
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f llm/backend.pid ]; then
+            kill $(cat llm/backend.pid) || true
+          fi
+
+  docker-build-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [pylint, code-quality, promptfoo-tests, deepeval-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    
+    strategy:
+      matrix:
+        include:
+          - name: llm-frontend
+            context: ./llm-frontend-python
+          - name: llm-multiroute
+            context: ./llm-multiroute
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:buildcache,mode=max
+
+  summary:
+    name: Frontend Summary
+    runs-on: ubuntu-latest
+    needs: [pylint, code-quality, promptfoo-tests, deepeval-tests, docker-build-push]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "=========================================="
+          echo "Frontend CI/CD Results"
+          echo "=========================================="
+          echo "Pylint:          ${{ needs.pylint.result }}"
+          echo "Code Quality:    ${{ needs.code-quality.result }}"
+          echo "Promptfoo:       ${{ needs.promptfoo-tests.result }}"
+          echo "Deepeval:        ${{ needs.deepeval-tests.result }}"
+          echo "Docker Build:    ${{ needs.docker-build-push.result }}"
+          echo "=========================================="
+          
+          if [ "${{ needs.pylint.result }}" != "success" ] || \
+             [ "${{ needs.code-quality.result }}" != "success" ] || \
+             [ "${{ needs.promptfoo-tests.result }}" != "success" ] || \
+             [ "${{ needs.deepeval-tests.result }}" != "success" ]; then
+            echo "❌ Frontend checks failed"
+            exit 1
+          fi
+          
+          if [ "${{ github.ref }}" == "refs/heads/main" ] && [ "${{ needs.docker-build-push.result }}" != "success" ]; then
+            echo "❌ Docker build/push failed"
+            exit 1
+          fi
+          
+          echo "✅ Frontend workflow completed successfully!"
