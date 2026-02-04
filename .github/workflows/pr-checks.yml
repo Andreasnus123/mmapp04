@@ -1,0 +1,135 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-python:
+    name: Lint Python Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install linting tools
+        run: |
+          pip install flake8 black isort
+      
+      - name: Lint llm-frontend-python
+        working-directory: ./llm-frontend-python
+        run: |
+          echo "Checking code formatting..."
+          black --check . || echo "⚠️ Code formatting issues found. Run 'black .' to fix."
+          
+          echo "Checking import sorting..."
+          isort --check-only . || echo "⚠️ Import sorting issues found. Run 'isort .' to fix."
+          
+          echo "Running flake8..."
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503 || true
+      
+      - name: Lint llm-multiroute
+        working-directory: ./llm-multiroute
+        run: |
+          echo "Checking code formatting..."
+          black --check . || echo "⚠️ Code formatting issues found. Run 'black .' to fix."
+          
+          echo "Checking import sorting..."
+          isort --check-only . || echo "⚠️ Import sorting issues found. Run 'isort .' to fix."
+          
+          echo "Running flake8..."
+          flake8 . --max-line-length=120 --extend-ignore=E203,W503 || true
+
+  validate-docker:
+    name: Validate Dockerfiles
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: llm/Dockerfile
+          failure-threshold: warning
+      
+      - name: Lint Frontend Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: llm-frontend-python/Dockerfile
+          failure-threshold: warning
+
+  validate-kubernetes:
+    name: Validate Kubernetes Manifests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install kubeval
+        run: |
+          wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
+          tar xf kubeval-linux-amd64.tar.gz
+          sudo mv kubeval /usr/local/bin
+      
+      - name: Validate manifests
+        run: |
+          kubeval k8s/*.yaml
+
+  check-dependencies:
+    name: Check Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Check Python dependencies
+        run: |
+          pip install safety
+          
+          echo "Checking llm-frontend-python dependencies..."
+          safety check -r llm-frontend-python/requirements.txt || true
+          
+          echo "Checking llm-multiroute dependencies..."
+          safety check -r llm-multiroute/requirements.txt || true
+          
+          echo "Checking deepeval-tests dependencies..."
+          safety check -r deepeval-tests/requirements.txt || true
+
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [lint-python, validate-docker, validate-kubernetes, check-dependencies]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "PR Check Results:"
+          echo "Python Lint: ${{ needs.lint-python.result }}"
+          echo "Docker Validation: ${{ needs.validate-docker.result }}"
+          echo "Kubernetes Validation: ${{ needs.validate-kubernetes.result }}"
+          echo "Dependency Check: ${{ needs.check-dependencies.result }}"
+          
+          if [ "${{ needs.lint-python.result }}" == "failure" ] || \
+             [ "${{ needs.validate-docker.result }}" == "failure" ] || \
+             [ "${{ needs.validate-kubernetes.result }}" == "failure" ]; then
+            echo "❌ PR checks failed"
+            exit 1
+          fi
+          
+          echo "✅ All PR checks passed"

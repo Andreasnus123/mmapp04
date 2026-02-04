@@ -1,0 +1,83 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+
+# Documentation
+*.md
+README*
+LICENSE
+CHANGELOG*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test files
+*_test.go
+*_test.py
+test_*.py
+tests/
+__tests__/
+*.test.js
+*.spec.js
+
+# Coverage
+coverage/
+.coverage
+htmlcov/
+*.cover
+
+# Build artifacts
+target/
+build/
+dist/
+*.egg-info/
+
+# Dependencies
+node_modules/
+venv/
+env/
+.venv/
+
+# Cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Environment files (keep .env.example)
+.env
+.env.local
+.env.*.local
+
+# Kubernetes
+k8s/
+*.yaml
+*.yml
+
+# Promptfoo
+.promptfoo/
+
+# Deepeval
+.deepeval/
