@@ -148,16 +148,16 @@ jobs:
           echo $! > backend.pid
           
           echo "Waiting for backend to start..."
-          for i in {1..60}; do
-            if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+          for i in {1..30}; do
+            if curl -s http://localhost:8080 > /dev/null 2>&1; then
               echo "Backend is ready!"
               exit 0
             fi
-            echo "Attempt $i/60: Backend not ready yet, waiting..."
+            echo "Attempt $i/30: Backend not ready yet, waiting..."
             sleep 2
           done
           
-          echo "Backend failed to start within 120 seconds"
+          echo "Backend failed to start within 60 seconds"
           exit 1
         env:
           SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -214,16 +214,16 @@ jobs:
           echo $! > backend.pid
           
           echo "Waiting for backend to start..."
-          for i in {1..60}; do
-            if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+          for i in {1..30}; do
+            if curl -s http://localhost:8080 > /dev/null 2>&1; then
               echo "Backend is ready!"
               exit 0
             fi
-            echo "Attempt $i/60: Backend not ready yet, waiting..."
+            echo "Attempt $i/30: Backend not ready yet, waiting..."
             sleep 2
           done
           
-          echo "Backend failed to start within 120 seconds"
+          echo "Backend failed to start within 60 seconds"
           exit 1
         env:
           SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
