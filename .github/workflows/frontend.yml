@@ -146,7 +146,19 @@ jobs:
         run: |
           java -jar target/*.jar &
           echo $! > backend.pid
-          timeout 60 bash -c 'until curl -f http://localhost:8080/actuator/health 2>/dev/null; do sleep 2; done'
+          
+          echo "Waiting for backend to start..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+              echo "Backend is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/60: Backend not ready yet, waiting..."
+            sleep 2
+          done
+          
+          echo "Backend failed to start within 120 seconds"
+          exit 1
         env:
           SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       
@@ -200,7 +212,19 @@ jobs:
         run: |
           java -jar target/*.jar &
           echo $! > backend.pid
-          timeout 60 bash -c 'until curl -f http://localhost:8080/actuator/health 2>/dev/null; do sleep 2; done'
+          
+          echo "Waiting for backend to start..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8080/actuator/health 2>/dev/null; then
+              echo "Backend is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/60: Backend not ready yet, waiting..."
+            sleep 2
+          done
+          
+          echo "Backend failed to start within 120 seconds"
+          exit 1
         env:
           SPRING_AI_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       
