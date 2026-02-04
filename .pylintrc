@@ -20,7 +20,11 @@ disable=
     fixme,
     broad-except,
     logging-fstring-interpolation,
-    line-too-long
+    line-too-long,
+    redefined-outer-name,
+    unused-argument,
+    unused-import,
+    duplicate-code
 
 [FORMAT]
 # Maximum number of characters on a single line.
