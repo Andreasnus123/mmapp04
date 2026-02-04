@@ -30,11 +30,19 @@ jobs:
       - name: Install pylint
         run: pip install pylint
       
+      - name: Install llm-frontend-python dependencies
+        working-directory: ./llm-frontend-python
+        run: pip install -r requirements.txt
+      
       - name: Pylint - llm-frontend-python
         working-directory: ./llm-frontend-python
         run: |
           echo "Running pylint on llm-frontend-python..."
           pylint --rcfile=../.pylintrc *.py || exit 1
+      
+      - name: Install llm-multiroute dependencies
+        working-directory: ./llm-multiroute
+        run: pip install -r requirements.txt
       
       - name: Pylint - llm-multiroute
         working-directory: ./llm-multiroute
@@ -42,11 +50,19 @@ jobs:
           echo "Running pylint on llm-multiroute..."
           pylint --rcfile=../.pylintrc app/ tests/ || exit 1
       
+      - name: Install llm-python dependencies
+        working-directory: ./llm-python
+        run: pip install -r requirements.txt
+      
       - name: Pylint - llm-python
         working-directory: ./llm-python
         run: |
           echo "Running pylint on llm-python..."
           pylint --rcfile=../.pylintrc app/ tests/ || exit 1
+      
+      - name: Install deepeval-tests dependencies
+        working-directory: ./deepeval-tests
+        run: pip install -r requirements.txt
       
       - name: Pylint - deepeval-tests
         working-directory: ./deepeval-tests
